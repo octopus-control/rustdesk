@@ -154,7 +154,11 @@ jobs:
         run: |
           cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff "$FLUTTER_ROOT"
           cd "$FLUTTER_ROOT"
-          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          if git apply --check flutter_3.24.4_dropdown_menu_enableFilter.diff; then
+            git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          else
+            echo "Flutter dropdown_menu patch does not apply; continuing with installed Flutter SDK."
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
