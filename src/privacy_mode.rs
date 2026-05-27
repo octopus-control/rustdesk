@@ -1,10 +1,6 @@
 use crate::ui_interface::get_option;
 #[cfg(windows)]
-use crate::{
-    display_service,
-    ipc::{connect, Data},
-    platform::is_installed,
-};
+use crate::ipc::{connect, Data};
 #[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{anyhow::anyhow, bail, lazy_static, tokio::sync::oneshot, ResultType};
@@ -92,15 +88,7 @@ lazy_static::lazy_static! {
     pub static ref DEFAULT_PRIVACY_MODE_IMPL: String = {
         #[cfg(windows)]
         {
-            if display_service::is_privacy_mode_mag_supported() {
-                PRIVACY_MODE_IMPL_WIN_MAG
-            } else {
-                if is_installed() {
-                    PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-                } else {
-                    ""
-                }
-            }.to_owned()
+            PRIVACY_MODE_IMPL_WIN_MAG.to_owned()
         }
         #[cfg(not(windows))]
         {
@@ -144,15 +132,13 @@ lazy_static::lazy_static! {
         let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
         #[cfg(windows)]
         {
-            if display_service::is_privacy_mode_mag_supported() {
-                map.insert(win_mag::PRIVACY_MODE_IMPL, |impl_key: &str| {
-                    Box::new(win_mag::PrivacyModeImpl::new(impl_key))
-                });
-            }
+            map.insert(win_mag::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                Box::new(win_mag::PrivacyModeImpl::new(impl_key))
+            });
 
             map.insert(win_virtual_display::PRIVACY_MODE_IMPL, |impl_key: &str| {
-                    Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
-                });
+                Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
+            });
         }
         Arc::new(Mutex::new(map))
     };
@@ -319,23 +305,7 @@ async fn set_privacy_mode_state(
 pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
     #[cfg(target_os = "windows")]
     {
-        let mut vec_impls = Vec::new();
-
-        if display_service::is_privacy_mode_mag_supported() {
-            vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
-        }
-
-        if vec_impls.is_empty()
-            && is_installed()
-            && crate::platform::windows::is_self_service_running()
-        {
-            vec_impls.push((
-                PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
-                "privacy_mode_impl_virtual_display_tip",
-            ));
-        }
-
-        vec_impls
+        vec![(PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip")]
     }
     #[cfg(target_os = "macos")]
     {
