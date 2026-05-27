@@ -20,6 +20,7 @@ env:
 jobs:
   generate-bridge:
     name: Generate Flutter bridge
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout source
@@ -102,6 +103,7 @@ jobs:
 
   build-windows:
     name: Build Windows x64
+    if: ${{ false }}
     runs-on: windows-2022
     needs: [generate-bridge, build-topmost-window]
     steps:
