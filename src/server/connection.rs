@@ -5292,6 +5292,9 @@ async fn start_ipc(
     if stream.is_none() {
         #[allow(unused_mut)]
         #[allow(unused_assignments)]
+        #[cfg(target_os = "windows")]
+        let mut args = vec!["--cm-no-ui"];
+        #[cfg(not(target_os = "windows"))]
         let mut args = vec!["--cm"];
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
