@@ -1,5 +1,8 @@
 use super::{PrivacyMode, INVALID_PRIVACY_MODE_CONN_ID};
-use crate::{platform::windows::get_user_token, privacy_mode::PrivacyModeState};
+use crate::{
+    platform::windows::{get_current_session_id, get_user_token, is_share_rdp},
+    privacy_mode::PrivacyModeState,
+};
 use hbb_common::{allow_err, bail, log, ResultType};
 use std::{
     ffi::CString,
@@ -20,7 +23,7 @@ use winapi::{
             CreateProcessAsUserW, QueueUserAPC, ResumeThread, TerminateProcess,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
+        winbase::{CREATE_SUSPENDED, DETACHED_PROCESS},
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
@@ -248,7 +251,7 @@ impl PrivacyModeImpl {
                 dwThreadId: 0,
             };
 
-            let session_id = WTSGetActiveConsoleSessionId();
+            let session_id = get_current_session_id(is_share_rdp());
             let token = get_user_token(session_id, true);
             if token.is_null() {
                 bail!("Failed to get token of current user");
