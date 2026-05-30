@@ -4492,6 +4492,7 @@ impl Connection {
             return;
         }
 
+        let mut privacy_turned_on = false;
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
@@ -4524,6 +4525,7 @@ impl Connection {
                             5_000,
                         );
                         if err_msg.is_empty() {
+                            privacy_turned_on = true;
                             crate::common::make_privacy_mode_msg(
                                 back_notification::PrivacyModeState::PrvOnSucceeded,
                                 impl_key,
@@ -4569,6 +4571,14 @@ impl Connection {
             }
         };
         self.send(msg_out).await;
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if privacy_turned_on {
+            if let Some(s) = self.server.upgrade() {
+                let mut lock = s.write().unwrap();
+                lock.subscribe(NAME_CURSOR, self.inner.clone(), false);
+                lock.subscribe(NAME_POS, self.inner.clone(), false);
+            }
+        }
     }
 
     async fn turn_off_privacy(&mut self, impl_key: String) {
@@ -4583,6 +4593,16 @@ impl Connection {
             Self::turn_off_privacy_to_msg(self.inner.id, impl_key)
         };
         self.send(msg_out).await;
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if let Some(s) = self.server.upgrade() {
+            let mut lock = s.write().unwrap();
+            lock.subscribe(
+                NAME_CURSOR,
+                self.inner.clone(),
+                self.peer_keyboard_enabled() || self.show_remote_cursor,
+            );
+            lock.subscribe(NAME_POS, self.inner.clone(), self.show_remote_cursor);
+        }
     }
 
     pub fn turn_off_privacy_to_msg(_conn_id: i32, impl_key: String) -> Message {
