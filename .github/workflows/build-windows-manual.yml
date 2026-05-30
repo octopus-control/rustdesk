@@ -1,15 +1,97 @@
 name: Build Windows (Manual)
 
-env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
-  LLVM_VERSION: "15.0.6"
-
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+
+env:
+  CARGO_EXPAND_VERSION: "1.0.95"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  BRIDGE_FLUTTER_VERSION: "3.22.3"
+  FLUTTER_VERSION: "3.24.5"
+  LLVM_VERSION: "15.0.6"
+  RUST_VERSION: "1.75"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
 jobs:
-  build-RustDeskTempTopMostWindow:
+  generate-bridge:
+    name: Generate Flutter bridge
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            g++ \
+            libclang-dev \
+            libgtk-3-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: bridge-ubuntu-22.04
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.BRIDGE_FLUTTER_VERSION }}
+          cache: true
+
+      - name: Generate bridge files
+        shell: bash
+        run: |
+          cargo install cargo-expand --version "${{ env.CARGO_EXPAND_VERSION }}" --locked
+          cargo install flutter_rust_bridge_codegen --version "${{ env.FLUTTER_RUST_BRIDGE_VERSION }}" --features "uuid" --locked
+          pushd flutter
+          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
+          flutter pub get
+          popd
+          flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+
+      - name: Upload bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-artifact
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+            ./flutter/macos/Runner/bridge_generated.h
+            ./flutter/ios/Runner/bridge_generated.h
+
+  build-topmost-window:
+    name: Build privacy mode window helper
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
       upload-artifact: true
@@ -19,80 +101,108 @@ jobs:
       target_version: Windows10
 
   build-windows:
-    name: x86_64-pc-windows-msvc (windows-2022)
+    name: Build Windows x64
     runs-on: windows-2022
-    strategy:
-      fail-fast: false
+    needs: [generate-bridge, build-topmost-window]
     steps:
-    - name: Export GitHub Actions cache environment variables
-      uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
-      with:
-        script: |
-          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    - name: Checkout source code
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      with:
-        submodules: recursive
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Install LLVM and Clang
-      uses: KyleMayes/install-llvm-action@1a3da29f56261a1e1f937ec88f0856a9b8321d7e # v1
-      with:
-        version: ${{ env.LLVM_VERSION }}
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
 
-    - name: Setup vcpkg with Github Actions binary cache
-      uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
-      with:
-        vcpkgDirectory: C:\vcpkg
-        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
 
-    - name: Install vcpkg dependencies
-      env:
-        VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
-      run: |
-        if ! $VCPKG_ROOT/vcpkg \
-          install \
-          --triplet x64-windows-static \
-          --x-install-root="$VCPKG_ROOT/installed"; then
-          find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
-            echo "$_1:"
-            echo "======"
-            cat "$_1"
-            echo "======"
-            echo ""
-          done
-          exit 1
-        fi
-      shell: bash
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-      with:
-        toolchain: stable
-        targets: x86_64-pc-windows-msvc
-        components: ''
+      - name: Replace Flutter Windows engine
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          $flutterInfo = flutter --version --machine | ConvertFrom-Json
+          $flutterRoot = $flutterInfo.flutterRoot
+          "FLUTTER_ROOT=$flutterRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $enginePath = Join-Path $flutterRoot "bin/cache/artifacts/engine/windows-x64-release"
+          New-Item -ItemType Directory -Force -Path $enginePath | Out-Null
+          Copy-Item -Path "windows-x64-release/*" -Destination $enginePath -Recurse -Force
 
-    - name: Show version information (Rust, cargo)
-      shell: bash
-      run: |
-        rustup -V
-        rustup toolchain list
-        rustup default
-        cargo -V
-        rustc -V
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff "$FLUTTER_ROOT"
+          cd "$FLUTTER_ROOT"
+          if git apply --check flutter_3.24.4_dropdown_menu_enableFilter.diff; then
+            git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          else
+            echo "Flutter dropdown_menu patch does not apply; continuing with installed Flutter SDK."
+          fi
 
-    - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
 
-    - name: Build
-      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
-      with:
-        command: build
-        args: --locked --release --target=x86_64-pc-windows-msvc
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: rustdesk-windows-x86_64
-        path: target/x86_64-pc-windows-msvc/release/
-        if-no-files-found: error
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: |
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet x64-windows-static \
+            --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build RustDesk
+        shell: pwsh
+        run: |
+          python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+          New-Item -ItemType Directory -Force -Path .\artifacts | Out-Null
+          Copy-Item -Path .\flutter\build\windows\x64\runner\Release -Destination .\artifacts\rustdesk-windows-x64 -Recurse -Force
+
+      - name: Download privacy mode helper
+        uses: actions/download-artifact@v4
+        with:
+          name: topmostwindow-artifacts
+          path: artifacts/rustdesk-windows-x64
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-windows-x64
+          path: artifacts/rustdesk-windows-x64
