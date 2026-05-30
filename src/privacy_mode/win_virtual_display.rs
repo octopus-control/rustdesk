@@ -511,6 +511,7 @@ impl PrivacyMode for PrivacyModeImpl {
         guard.succeeded = true;
 
         allow_err!(super::win_input::hook());
+        super::set_monitor_power(false);
 
         Ok(true)
     }
@@ -522,6 +523,7 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
+        super::set_monitor_power(true);
         let _tmp_ignore_changed_holder = crate::display_service::temp_ignore_displays_changed();
         self.restore();
         // We need to force restore the registry connectivity.
