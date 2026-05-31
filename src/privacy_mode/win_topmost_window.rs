@@ -119,6 +119,7 @@ impl PrivacyMode for PrivacyModeImpl {
         unsafe {
             ShowWindow(hwnd as _, SW_SHOW);
         }
+        hide_cursor();
         self.conn_id = conn_id;
         self.hwnd = hwnd as _;
         Ok(true)
@@ -131,6 +132,7 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
+        show_cursor();
 
         unsafe {
             let hwnd = wait_find_privacy_hwnd(0)?;
@@ -319,6 +321,19 @@ impl Drop for PrivacyModeImpl {
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
             allow_err!(self.turn_off_privacy(self.conn_id, None));
         }
+    }
+}
+
+fn hide_cursor() {
+    unsafe {
+        while ShowCursor(FALSE) >= 0 {}
+        SetCursor(NULL as _);
+    }
+}
+
+fn show_cursor() {
+    unsafe {
+        while ShowCursor(TRUE) < 0 {}
     }
 }
 
