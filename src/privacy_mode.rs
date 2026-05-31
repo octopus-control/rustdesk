@@ -429,21 +429,3 @@ pub fn is_in_privacy_mode() -> bool {
         .map(|pm| pm.pre_conn_id() != INVALID_PRIVACY_MODE_CONN_ID)
         .unwrap_or(false)
 }
-
-#[cfg(windows)]
-pub fn set_monitor_power(on: bool) {
-    use winapi::{
-        shared::windef::HWND,
-        um::winuser::{PostMessageW, WM_SYSCOMMAND, HWND_BROADCAST},
-    };
-    const SC_MONITORPOWER: usize = 0xF170;
-    let lparam: winapi::shared::minwindef::LPARAM = if on { -1 } else { 2 };
-    unsafe {
-        PostMessageW(
-            HWND_BROADCAST as HWND,
-            WM_SYSCOMMAND,
-            SC_MONITORPOWER,
-            lparam,
-        );
-    }
-}

@@ -121,7 +121,6 @@ impl PrivacyMode for PrivacyModeImpl {
         }
         self.conn_id = conn_id;
         self.hwnd = hwnd as _;
-        super::set_monitor_power(false);
         Ok(true)
     }
 
@@ -132,7 +131,6 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
-        super::set_monitor_power(true);
 
         unsafe {
             let hwnd = wait_find_privacy_hwnd(0)?;
