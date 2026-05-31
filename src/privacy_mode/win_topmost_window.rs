@@ -11,7 +11,7 @@ use std::{
 };
 use winapi::{
     shared::{
-        minwindef::FALSE,
+        minwindef::{FALSE, TRUE},
         ntdef::{HANDLE, NULL},
         windef::HWND,
     },
