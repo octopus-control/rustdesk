@@ -45,10 +45,9 @@ jobs:
         run: |
           git clone https://github.com/octopus-control/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
 
-        # Build. commit 4e4868ceb675e5c449010adbca3d80e34fe22765 hides the local cursor over the privacy window.
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout 4e4868ceb675e5c449010adbca3d80e34fe22765
+          cd RustDeskTempTopMostWindow
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
